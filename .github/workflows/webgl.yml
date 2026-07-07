@@ -11,7 +11,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Pull Git LFS files
+        run: |
+          git lfs install
+          git lfs pull
 
       - name: Cache Library
         uses: actions/cache@v4
@@ -20,6 +29,13 @@ jobs:
           key: Library-WebGL-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-WebGL-
+
+      # Temporary debug step - remove after first successful build
+      - name: Verify DOTween
+        run: |
+          echo "===== DOTween ====="
+          ls -lah Assets/Plugins/Demigiant/DOTween
+          file Assets/Plugins/Demigiant/DOTween/DOTween.dll || true
 
       - name: Build Unity Project
         uses: game-ci/unity-builder@v4
@@ -38,6 +54,7 @@ jobs:
           production-branch: main
           github-token: ${{ secrets.GITHUB_TOKEN }}
           deploy-message: Automated deployment
+
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
