@@ -17,6 +17,22 @@ jobs:
           lfs: true
           fetch-depth: 0
 
+      - name: Generate Build Info
+        run: |
+            mkdir -p Assets/StreamingAssets
+
+            cat > Assets/StreamingAssets/buildinfo.json <<EOF
+            {
+            "version":"1.0.${{ github.run_number }}",
+            "buildNumber":"${{ github.run_number }}",
+            "commit":"${{ github.sha }}",
+            "branch":"${{ github.ref_name }}",
+            "buildDate":"$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "unityVersion":"${{ vars.UNITY_VERSION }}",
+            "workflow":"GitHub Actions"
+            }
+            EOF
+
       - name: Pull Git LFS files
         run: |
           git lfs install
