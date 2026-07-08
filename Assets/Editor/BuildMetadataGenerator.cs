@@ -2,19 +2,23 @@ using System;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
-using static PlasticGui.WorkspaceWindow.Merge.MergeInProgress;
 
 public static class BuildMetadataGenerator
 {
     private static string GetEnv(string key, string fallback)
     {
-        var value = Environment.GetEnvironmentVariable(key);
-        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+        string value = Environment.GetEnvironmentVariable(key);
+
+        Debug.Log($"{key} = {(string.IsNullOrEmpty(value) ? "<NULL>" : value)}");
+
+        return string.IsNullOrEmpty(value) ? fallback : value;
     }
 
     public static void Generate()
     {
-        var buildInfo = new BuildInfo
+        Debug.Log("========== BUILD METADATA ==========");
+
+        BuildInfo buildInfo = new BuildInfo
         {
             version = GetEnv("VERSION", "dev"),
             buildNumber = GetEnv("BUILD_NUMBER", "0"),
@@ -24,35 +28,26 @@ public static class BuildMetadataGenerator
             unityVersion = Application.unityVersion,
             workflow = GetEnv("WORKFLOW", "Local"),
 
-            buildConfiguration = GetEnv("CONFIGURATION", "Release");
-            targetPlatform = "WebGL";
-            buildMachine = GetEnv("RUNNER_NAME", "Local");
+            buildConfiguration = "Release",
+            targetPlatform = "WebGL",
+            buildMachine = Environment.MachineName
         };
-
-        string commit = GetEnv("COMMIT_SHA", "local");
-        buildInfo.commit = commit.Length > 7 ? commit.Substring(0, 7) : commit;
 
         const string folder = "Assets/StreamingAssets";
 
         if (!Directory.Exists(folder))
             Directory.CreateDirectory(folder);
 
-        string filePath = Path.Combine(folder, "buildinfo.json");
+        string path = Path.Combine(folder, "buildinfo.json");
 
-        File.WriteAllText(
-            filePath,
-            JsonUtility.ToJson(buildInfo, true));
+        File.WriteAllText(path, JsonUtility.ToJson(buildInfo, true));
 
-        AssetDatabase.ImportAsset(filePath, ImportAssetOptions.ForceUpdate);
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
-        if (!File.Exists(filePath))
-        {
-            throw new Exception("Failed to generate buildinfo.json");
-        }
-
-        Debug.Log($"Generated Build Metadata\n{File.ReadAllText(filePath)}");
+        Debug.Log("========== GENERATED JSON ==========");
+        Debug.Log(File.ReadAllText(path));
     }
 
     private static string ShortCommit(string commit)
@@ -60,8 +55,6 @@ public static class BuildMetadataGenerator
         if (string.IsNullOrEmpty(commit))
             return "local";
 
-        return commit.Length > 7
-            ? commit.Substring(0, 7)
-            : commit;
+        return commit.Length > 7 ? commit[..7] : commit;
     }
 }
