@@ -1,29 +1,64 @@
+using System.Collections;
 using System.IO;
 using UnityEngine;
+using UnityEngine.Networking;
 
 public class BuildInfoLoader : MonoBehaviour
 {
+    private static BuildInfoLoader Instance;
     public static BuildInfo Info { get; private set; }
+
+    public static bool IsLoaded { get; private set; }
 
     private void Awake()
     {
-        Load();
-    }
-
-    public static void Load()
-    {
-        string path = Path.Combine(Application.streamingAssetsPath, "buildinfo.json");
-
-        if (!File.Exists(path))
+        if (Instance != null)
         {
-            Debug.LogWarning($"buildinfo.json not found:\n{path}");
+            Destroy(gameObject);
             return;
         }
 
-        string json = File.ReadAllText(path);
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
 
-        Info = JsonUtility.FromJson<BuildInfo>(json);
+        StartCoroutine(Load());
+    }
 
-        Debug.Log("BuildInfo Loaded Successfully");
+    private IEnumerator Load()
+    {
+        string path = Path.Combine(Application.streamingAssetsPath, "buildinfo.json");
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+
+        using UnityWebRequest request = UnityWebRequest.Get(path);
+
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogError($"Failed to load BuildInfo\n{request.error}");
+            IsLoaded = true;
+            yield break;
+        }
+
+        Info = JsonUtility.FromJson<BuildInfo>(request.downloadHandler.text);
+
+#else
+
+        if (!File.Exists(path))
+        {
+            Debug.LogError($"buildinfo.json not found\n{path}");
+            IsLoaded = true;
+            yield break;
+        }
+
+        Info = JsonUtility.FromJson<BuildInfo>(File.ReadAllText(path));
+
+#endif
+
+        IsLoaded = true;
+
+        Debug.Log("BuildInfo Loaded");
+        Debug.Log(JsonUtility.ToJson(Info, true));
     }
 }
