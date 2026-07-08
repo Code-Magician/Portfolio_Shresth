@@ -74,20 +74,47 @@ jobs:
       # Debug (Temporary)
       #########################################################################
 
-      - name: Print Build Variables
-        run: |
-          echo "VERSION=$VERSION"
-          echo "BUILD_NUMBER=$BUILD_NUMBER"
-          echo "COMMIT_SHA=$COMMIT_SHA"
-          echo "BRANCH_NAME=$BRANCH_NAME"
-          echo "BUILD_DATE=$BUILD_DATE"
-          echo "WORKFLOW=$WORKFLOW"
+      # - name: Print Build Variables
+      #   run: |
+      #     echo "VERSION=$VERSION"
+      #     echo "BUILD_NUMBER=$BUILD_NUMBER"
+      #     echo "COMMIT_SHA=$COMMIT_SHA"
+      #     echo "BRANCH_NAME=$BRANCH_NAME"
+      #     echo "BUILD_DATE=$BUILD_DATE"
+      #     echo "WORKFLOW=$WORKFLOW"
 
       - name: Verify DOTween
         run: |
           echo "===== DOTween ====="
           ls -lah Assets/Plugins/Demigiant/DOTween
           file Assets/Plugins/Demigiant/DOTween/DOTween.dll || true
+
+      #########################################################################
+      # Generate Build Metadata
+      #########################################################################
+
+      - name: Generate Build Metadata
+        shell: bash
+        run: |
+          mkdir -p Assets/StreamingAssets
+
+          cat > Assets/StreamingAssets/buildinfo.json <<EOF
+          {
+            "version": "1.0.${{ github.run_number }}",
+            "buildNumber": "${{ github.run_number }}",
+            "commit": "${{ github.sha }}",
+            "branch": "${{ github.ref_name }}",
+            "buildDate": "${{ github.event.head_commit.timestamp }}",
+            "unityVersion": "6000.4.3f1",
+            "workflow": "GitHub Actions",
+            "buildConfiguration": "Release",
+            "targetPlatform": "WebGL",
+            "buildMachine": "GitHub Runner"
+          }
+          EOF
+
+          echo "===== Generated buildinfo.json ====="
+          cat Assets/StreamingAssets/buildinfo.json
 
       #########################################################################
       # Unity Build
@@ -99,13 +126,6 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-
-          VERSION: ${{ env.VERSION }}
-          BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
-          COMMIT_SHA: ${{ env.COMMIT_SHA }}
-          BRANCH_NAME: ${{ env.BRANCH_NAME }}
-          BUILD_DATE: ${{ env.BUILD_DATE }}
-          WORKFLOW: ${{ env.WORKFLOW }}
 
         with:
           targetPlatform: WebGL

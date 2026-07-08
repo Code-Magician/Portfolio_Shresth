@@ -5,8 +5,6 @@ public static class BuildScript
 {
     public static void BuildWebGL()
     {
-        BuildMetadataGenerator.Generate();
-
         const string outputPath = "Build/WebGL";
 
         if (!Directory.Exists(outputPath))
