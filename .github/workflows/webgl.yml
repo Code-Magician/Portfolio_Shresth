@@ -135,20 +135,20 @@ jobs:
 
             major)
               echo "Incrementing Major"
-              ((MAJOR++))
+              MAJOR=$((MAJOR + 1))
               MINOR=0
               PATCH=0
               ;;
 
             minor)
               echo "Incrementing Minor"
-              ((MINOR++))
+              MINOR=$((MINOR + 1))
               PATCH=0
               ;;
 
             patch)
               echo "Incrementing Patch"
-              ((PATCH++))
+              PATCH=$((PATCH + 1))
               ;;
 
             *)
