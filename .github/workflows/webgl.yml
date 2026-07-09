@@ -12,26 +12,23 @@ on:
       - develop
       - main
 
-    paths-ignore:
-      - "README.md"
-      - "LICENSE"
-      - "docs/**"
-      - ".gitignore"
-
 permissions:
   contents: read
+  deployments: write
+  statuses: write
 
 #########################################################################
 # Prevent multiple builds of the same branch.
 #########################################################################
 
 concurrency:
-  group: webgl-${{ github.ref }}
+  group: webgl-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   build:
     name: Build & Deploy
+
     runs-on: ubuntu-latest
 
     timeout-minutes: 60
@@ -45,6 +42,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
       with:
+        ref: ${{ github.sha }}
         lfs: true
         fetch-depth: 0
 
@@ -60,12 +58,23 @@ jobs:
     - name: Read Commit Message
       shell: bash
       run: |
+        BRANCH_NAME="${{ github.ref_name }}"
+        COMMIT_SHA="${{ github.sha }}"
+        COMMIT_MESSAGE="$(git log -1 --pretty=%B "$COMMIT_SHA")"
 
-        COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
-
+        echo "Branch: $BRANCH_NAME"
+        echo "Commit: $COMMIT_SHA"
+        echo "Commit Message:"
         echo "$COMMIT_MESSAGE"
 
-        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+        echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+        echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+
+        {
+          echo "COMMIT_MESSAGE<<EOF_COMMIT_MESSAGE"
+          echo "$COMMIT_MESSAGE"
+          echo "EOF_COMMIT_MESSAGE"
+        } >> $GITHUB_ENV
 
     #######################################################################
     # Should Build?
@@ -74,18 +83,28 @@ jobs:
     - name: Detect Build Commit
       shell: bash
       run: |
-
         BUILD=false
 
-        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+        if [[ "$COMMIT_MESSAGE" == *"[skip ci]"* || "$COMMIT_MESSAGE" == *"[ci skip]"* ]]; then
 
-            # Always build on production
-            BUILD=true
+          echo "Skip CI detected. Build will not run."
+          BUILD=false
 
-        elif [[ "$COMMIT_MESSAGE" =~ ^chore\(webgl\): ]]; then
+        elif [[ "$BRANCH_NAME" == "main" ]]; then
 
-            # Only build version bump commits on develop
-            BUILD=true
+          # Always build production when changes are merged/pushed to main
+          BUILD=true
+
+        elif [[ "$BRANCH_NAME" == "develop" && "$COMMIT_MESSAGE" =~ ^chore\(webgl\): ]]; then
+
+          # Only build development after version.yml creates the version bump commit
+          BUILD=true
+
+        else
+
+          # Any normal develop commit should not build directly.
+          # version.yml will decide whether to bump .version.
+          BUILD=false
 
         fi
 
@@ -93,23 +112,13 @@ jobs:
         echo "BUILD = $BUILD"
 
     #######################################################################
-    # Stop if not a build commit
-    #######################################################################
-
-    - name: Exit
-      if: env.BUILD != 'true'
-      run: |
-        echo "Skipping Unity Build."
-        exit 0
-
-    #######################################################################
     # Read Version
     #######################################################################
 
     - name: Read Version
+      if: env.BUILD == 'true'
       shell: bash
       run: |
-
         VERSION=$(cat "${{ vars.VERSION_FILE }}")
 
         echo "VERSION=$VERSION" >> $GITHUB_ENV
@@ -121,10 +130,10 @@ jobs:
     #######################################################################
 
     - name: Create Build Version
+      if: env.BUILD == 'true'
       shell: bash
       run: |
-
-        if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+        if [[ "$BRANCH_NAME" == "develop" ]]; then
 
           BUILD_VERSION="${VERSION}-dev.${{ github.run_number }}"
 
@@ -143,6 +152,7 @@ jobs:
     #######################################################################
 
     - name: Cache Unity Library
+      if: env.BUILD == 'true'
       uses: actions/cache@v4
       with:
         path: Library
@@ -155,6 +165,7 @@ jobs:
     #######################################################################
 
     - name: Record Build Start
+      if: env.BUILD == 'true'
       run: echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
 
     #######################################################################
@@ -162,18 +173,20 @@ jobs:
     #######################################################################
 
     - name: Generate Build Metadata
+      if: env.BUILD == 'true'
       shell: bash
       run: |
-
         mkdir -p Assets/StreamingAssets
+
+        BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
         cat > Assets/StreamingAssets/buildinfo.json <<EOF
         {
           "version": "$BUILD_VERSION",
           "buildNumber": "${{ github.run_number }}",
-          "commit": "${{ github.sha }}",
-          "branch": "${{ github.ref_name }}",
-          "buildDate": "${{ github.event.head_commit.timestamp }}",
+          "commit": "$COMMIT_SHA",
+          "branch": "$BRANCH_NAME",
+          "buildDate": "$BUILD_DATE",
           "unityVersion": "${{ vars.UNITY_VERSION }}",
           "workflow": "GitHub Actions",
           "buildConfiguration": "Release",
@@ -192,6 +205,7 @@ jobs:
     #######################################################################
 
     - name: Build Unity Project
+      if: env.BUILD == 'true'
       uses: game-ci/unity-builder@v4
       env:
         UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
@@ -202,11 +216,11 @@ jobs:
         buildMethod: BuildScript.BuildWebGL
 
     #######################################################################
-    # Upload Artifact (Production Only)
+    # Upload Artifact Production Only
     #######################################################################
 
     - name: Upload WebGL Build
-      if: github.ref == 'refs/heads/main'
+      if: env.BUILD == 'true' && env.BRANCH_NAME == 'main'
       uses: actions/upload-artifact@v4
       with:
         name: Portfolio-WebGL-${{ env.BUILD_VERSION }}
@@ -218,7 +232,7 @@ jobs:
     #######################################################################
 
     - name: Deploy Production
-      if: github.ref == 'refs/heads/main'
+      if: env.BUILD == 'true' && env.BRANCH_NAME == 'main'
       uses: nwtgck/actions-netlify@v3
       with:
         publish-dir: ${{ vars.BUILD_OUTPUT }}
@@ -226,7 +240,7 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         deploy-message: |
           🚀 Production Build ${{ env.BUILD_VERSION }}
-          Branch: ${{ github.ref_name }}
+          Branch: ${{ env.BRANCH_NAME }}
 
       env:
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -237,7 +251,7 @@ jobs:
     #######################################################################
 
     - name: Deploy Development
-      if: github.ref == 'refs/heads/develop'
+      if: env.BUILD == 'true' && env.BRANCH_NAME == 'develop'
       uses: nwtgck/actions-netlify@v3
       with:
         publish-dir: ${{ vars.BUILD_OUTPUT }}
@@ -245,7 +259,7 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         deploy-message: |
           🧪 Development Build ${{ env.BUILD_VERSION }}
-          Branch: ${{ github.ref_name }}
+          Branch: ${{ env.BRANCH_NAME }}
 
       env:
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -256,16 +270,31 @@ jobs:
     #######################################################################
 
     - name: Print Build Summary
+      if: env.BUILD == 'true'
       run: |
-
         BUILD_END=$(date +%s)
 
         echo ""
         echo "=================================================="
-        echo "Branch          : ${{ github.ref_name }}"
+        echo "Branch          : $BRANCH_NAME"
         echo "Version         : $BUILD_VERSION"
         echo "Run Number      : ${{ github.run_number }}"
         echo "Unity Version   : ${{ vars.UNITY_VERSION }}"
         echo "Build Target    : ${{ vars.BUILD_TARGET }}"
         echo "Duration        : $((BUILD_END - BUILD_START)) seconds"
+        echo "=================================================="
+
+    #######################################################################
+    # Skipped Build Summary
+    #######################################################################
+
+    - name: Print Skipped Build Summary
+      if: env.BUILD != 'true'
+      run: |
+        echo ""
+        echo "=================================================="
+        echo "Build skipped."
+        echo "Branch          : $BRANCH_NAME"
+        echo "Commit Message  : $COMMIT_MESSAGE"
+        echo "Reason          : Not main and not chore(webgl) version commit."
         echo "=================================================="
