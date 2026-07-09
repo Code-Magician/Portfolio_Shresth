@@ -286,6 +286,7 @@ jobs:
       with:
         publish-dir: ${{ vars.BUILD_OUTPUT }}
         production-branch: develop
+        production-deploy: true
         github-token: ${{ secrets.GITHUB_TOKEN }}
         deploy-message: |
           🧪 Development Build ${{ env.BUILD_VERSION }}
