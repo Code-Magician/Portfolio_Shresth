@@ -220,7 +220,7 @@ jobs:
         run: |
 
           if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-            BUILD_VERSION="${VERSION}-dev.${{ github.run_number }}"
+            BUILD_VERSION="${NEW_VERSION}-dev.${{ github.run_number }}"
           else
             BUILD_VERSION="${VERSION}"
           fi
