@@ -51,6 +51,29 @@ jobs:
           git lfs pull
 
       #######################################################################
+      # Read Current Version
+      #######################################################################
+
+      - name: Read Version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(cat .version)
+
+          echo "Current Version: $VERSION"
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      #######################################################################
+      # Print Current Version
+      #######################################################################
+
+      - name: Print Version
+        run: |
+          echo "Repository Version = $VERSION"
+
+      #######################################################################
       # Cache
       #######################################################################
 
