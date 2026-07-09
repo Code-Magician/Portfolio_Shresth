@@ -15,6 +15,9 @@ on:
       - "LICENSE"
       - "docs/**"
       - ".gitignore"
+      
+permissions:
+  contents: write
 
 #########################################################################
 # Prevent multiple builds of the same branch.
