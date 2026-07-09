@@ -1,4 +1,4 @@
-# Unity WebGL CI/CD Pipeline
+# Unity WebGL CI/CD Pipeline Using Github Actions
 
 This project uses **GitHub Actions** to automatically build and deploy a Unity WebGL project to Netlify.
 
