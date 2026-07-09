@@ -44,6 +44,8 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ github.ref }}
 
       - name: Pull Git LFS Files
         run: |
@@ -109,6 +111,85 @@ jobs:
           echo "VERSION_TYPE=$TYPE" >> $GITHUB_ENV
 
       #######################################################################
+      # Calculate Semantic Version
+      #######################################################################
+
+      - name: Calculate Semantic Version
+        if: github.ref == 'refs/heads/develop'
+        shell: bash
+        run: |
+
+          VERSION=$(cat "${{ vars.VERSION_FILE }}")
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          echo "----------------------------------------"
+          echo "Current Version : $VERSION"
+          echo "Version Type    : $VERSION_TYPE"
+          echo "----------------------------------------"
+
+          case "$VERSION_TYPE" in
+
+            major)
+              ((MAJOR++))
+              MINOR=0
+              PATCH=0
+              ;;
+
+            minor)
+              ((MINOR++))
+              PATCH=0
+              ;;
+
+            patch)
+              ((PATCH++))
+              ;;
+
+            *)
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          echo "New Version : $NEW_VERSION"
+
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      #######################################################################
+      # Update Version File
+      #######################################################################
+
+      - name: Update Version File
+        if: github.ref == 'refs/heads/develop' && env.VERSION_TYPE != 'none'
+        shell: bash
+        run: |
+
+          echo "$NEW_VERSION" > "${{ vars.VERSION_FILE }}"
+
+          echo ""
+          echo "Updated Version File"
+
+          cat "${{ vars.VERSION_FILE }}"
+
+      #######################################################################
+      # Commit Version File
+      #######################################################################
+
+      - name: Commit Version File
+        if: github.ref == 'refs/heads/develop' && env.VERSION_TYPE != 'none'
+        shell: bash
+        run: |
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "${{ vars.VERSION_FILE }}"
+
+          git commit -m "chore(version): bump version to $NEW_VERSION [skip ci]"
+
+          git push
+
+      #######################################################################
       # Cache
       #######################################################################
 
@@ -134,11 +215,18 @@ jobs:
       - name: Generate Build Metadata
         shell: bash
         run: |
+
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            BUILD_VERSION="${VERSION}-dev.${{ github.run_number }}"
+          else
+            BUILD_VERSION="${VERSION}"
+          fi
+
           mkdir -p Assets/StreamingAssets
 
           cat > Assets/StreamingAssets/buildinfo.json <<EOF
           {
-            "version": "1.0.${{ github.run_number }}",
+            "version": "$BUILD_VERSION",
             "buildNumber": "${{ github.run_number }}",
             "commit": "${{ github.sha }}",
             "branch": "${{ github.ref_name }}",
@@ -153,6 +241,8 @@ jobs:
 
           echo "========== BUILD INFO =========="
           cat Assets/StreamingAssets/buildinfo.json
+
+          echo "BUILD_VERSION=$BUILD_VERSION" >> $GITHUB_ENV
 
       #######################################################################
       # Unity Build
@@ -176,7 +266,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
-          name: Portfolio-WebGL-${{ github.run_number }}
+          name: Portfolio-WebGL-${{ env.BUILD_VERSION }}
           path: ${{ vars.BUILD_OUTPUT }}
           retention-days: 2
 
@@ -192,7 +282,7 @@ jobs:
           production-branch: main
           github-token: ${{ secrets.GITHUB_TOKEN }}
           deploy-message: |
-            🚀 Production Build #${{ github.run_number }}
+            🚀 Production Build ${{ env.BUILD_VERSION }}
             Branch: ${{ github.ref_name }}
 
         env:
@@ -211,7 +301,7 @@ jobs:
           production-branch: develop
           github-token: ${{ secrets.GITHUB_TOKEN }}
           deploy-message: |
-            🧪 Development Build #${{ github.run_number }}
+            🧪 Development Build ${{ env.BUILD_VERSION }}
             Branch: ${{ github.ref_name }}
 
         env:
@@ -228,7 +318,7 @@ jobs:
 
           echo ""
           echo "============================================"
-          echo "Branch        : ${{ github.ref_name }}"
+          echo "Branch        : $BUILD_VERSION"
           echo "Run Number    : ${{ github.run_number }}"
           echo "Build Target  : ${{ vars.BUILD_TARGET }}"
           echo "Unity Version : ${{ vars.UNITY_VERSION }}"
